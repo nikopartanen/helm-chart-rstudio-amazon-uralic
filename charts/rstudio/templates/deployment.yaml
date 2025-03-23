@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ .Values.appName }}
+  name: {{ .Values.appName }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Values.appName }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.appName }}
+    spec:
+      serviceAccount: build-reader
+      initContainers:
+      - name: wait-for-build
+        imagePullPolicy: IfNotPresent
+        image: quay.io/openshift/origin-cli:4.16
+        command:
+        - sh
+        - -c
+        - oc wait --for=jsonpath='{.status.phase}'=Complete build -l buildconfig={{ .Values.appName }} --timeout=900s
+      containers:
+      - name: {{ .Values.appName }}
+        imagePullPolicy: IfNotPresent
+        image: image-registry.openshift-image-registry.svc:5000/{{ .Release.Namespace }}/{{ .Values.appName }}:latest
+        ports:
+        - containerPort: 3838
+          protocol: TCP
+        - containerPort: 8787
+          protocol: TCP
+        volumeMounts:
+        - name: {{ .Values.rstudio.pvc.mountName }}
+          mountPath: /home/rstudio-server
+        - name: {{ .Values.shiny.pvc.mountName }}
+          mountPath: /srv/shiny-server
+        {{- if .Values.openshift.enabled}}
+        securityContext:
+        {{- .Values.rstudio.containerSecurityContext | toYaml | nindent 10 }}
+        {{- end }}
+      restartPolicy: Always
+      {{- if .Values.openshift.enabled }}
+      securityContext:
+      {{- .Values.rstudio.podSecurityContext | toYaml | nindent 8 }}
+      {{- end }}
+      volumes:
+      - name: {{ .Values.rstudio.pvc.mountName }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.rstudio.pvc.mountName }}
+      - name: {{ .Values.shiny.pvc.mountName }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.shiny.pvc.mountName }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-okd
+  name: nginx-okd
+spec:
+  selector:
+    matchLabels:
+      app: nginx-okd
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: nginx-okd
+    spec:
+      serviceAccount: build-reader
+      initContainers:
+      - name: wait-for-build
+        imagePullPolicy: IfNotPresent
+        image: quay.io/openshift/origin-cli:4.16
+        command:
+        - sh
+        - -c
+        - oc wait --for=jsonpath='{.status.phase}'=Complete build -l buildconfig=nginx-okd --timeout=900s
+      containers:
+      - name: nginx-okd
+        image: image-registry.openshift-image-registry.svc:5000/{{ .Release.Namespace }}/nginx-okd:latest
+        command:
+        - sh
+        - -xc
+        - >-
+          htpasswd -bc /etc/nginx/secret/htpasswd $USER $PASSWORD;
+          /docker-entrypoint.sh nginx -g "daemon off;"
+        env:
+        - name: USER
+          valueFrom:
+            secretKeyRef:
+              key: USER
+              name: nginx-password
+        - name: PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: PASSWORD
+              name: nginx-password
+        ports:
+        - containerPort: 8081
+          protocol: TCP
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/nginx/conf.d/
+          name: nginx-default
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: nginx-default
+        name: nginx-default
+      - name: nginx-password
+        secret:
+          defaultMode: 420
+          secretName: nginx-password

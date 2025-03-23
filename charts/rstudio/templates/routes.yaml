@@ -1,0 +1,38 @@
+{{- if .Values.openshift.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  labels:
+    app: {{ .Values.appName }}
+  name: rstudio
+spec:
+  host: {{ required "A valid .Values.rstudio.route.host entry is required!" .Values.rstudio.route.host }}.2.rahtiapp.fi
+  port:
+    targetPort: 8081
+  tls:
+    insecureEdgeTerminationPolicy: {{ .Values.rstudio.route.insecureEdgeTerminationPolicy }}
+    termination: {{ .Values.rstudio.route.termination }}
+  to:
+    kind: Service
+    name: nginx-okd
+    weight: 100
+
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  labels:
+    app: {{ .Values.appName }}
+  name: shiny
+spec:
+  host: {{ required "A valid .Values.shiny.route.host entry is required!" .Values.shiny.route.host }}.2.rahtiapp.fi
+  port:
+    targetPort: 3838
+  tls:
+    insecureEdgeTerminationPolicy: {{ .Values.shiny.route.insecureEdgeTerminationPolicy }}
+    termination: {{ .Values.shiny.route.termination }}
+  to:
+    kind: Service
+    name: {{ .Values.appName }}
+    weight: 100
+{{- end }}

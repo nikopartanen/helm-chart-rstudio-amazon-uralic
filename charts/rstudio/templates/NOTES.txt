@@ -1,0 +1,26 @@
+===================================
+  CSC Rstudio Shiny Helm deployed
+===================================
+Congratulations!
+Your Rstudio/Shiny application is now deployed. Wait a little bit the time that the buildconfig is completed.
+
+You can follow the build of the image with this command:
+  
+  oc logs bc/{{ .Values.appName }} --namespace {{ .Release.Namespace }} -f
+
+Once the build is over, you can access your Rstudio by retrieving the URL:
+
+You can retrieve Rstudio URL via this command:
+  
+  export RSTUDIO=$(oc get route rstudio --namespace {{ .Release.Namespace }} -o yaml | yq .spec.host)
+  echo "Rstudio server URL: http://$RSTUDIO/"
+
+To retrieve USER and PASSWORD:
+
+  echo USER: $(oc get secret --namespace={{ .Release.Namespace }} nginx-password -o jsonpath="{.data.USER}" | base64 -d)
+  echo PASSWORD: $(oc get secret --namespace={{ .Release.Namespace }} nginx-password -o jsonpath="{.data.PASSWORD}" | base64 -d)
+
+And for the Shiny Server:
+
+  export SHINY=$(oc get route shiny --namespace {{ .Release.Namespace }} -o yaml | yq .spec.host)
+  echo "Shiny App URL: http://$SHINY/"
